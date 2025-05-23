@@ -1,21 +1,11 @@
-const express = require("express");
-const app = express();
-const bodyParser = require("body-parser");
+import chromium from '@sparticuz/chromium';
+import puppeteer from 'puppeteer-core';
 
-let chrome = {};
-let puppeteer;
+export default async function handler(req, res) {
+  if (req.method !== 'POST') {
+    return res.status(405).json({ error: 'Only POST allowed' });
+  }
 
-// Detect if running in Vercel AWS Lambda
-if (process.env.AWS_LAMBDA_FUNCTION_VERSION) {
-  chrome = require("chrome-aws-lambda");
-  puppeteer = require("puppeteer-core");
-} else {
-  puppeteer = require("puppeteer");
-}
-
-app.use(bodyParser.json());
-
-app.post("/api/bookCalendly", async (req, res) => {
   const {
     targetMonth,
     targetDay,
@@ -29,27 +19,21 @@ app.post("/api/bookCalendly", async (req, res) => {
   let browser, page;
 
   try {
-    const launchOptions = process.env.AWS_LAMBDA_FUNCTION_VERSION
-      ? {
-          args: [...chrome.args, "--hide-scrollbars", "--disable-web-security"],
-          defaultViewport: chrome.defaultViewport,
-          executablePath: await chrome.executablePath,
-          headless: true,
-          ignoreHTTPSErrors: true,
-        }
-      : {
-          headless: "new",
-          args: ["--no-sandbox", "--disable-setuid-sandbox"],
-        };
+    browser = await puppeteer.launch({
+      args: chromium.args,
+      defaultViewport: chromium.defaultViewport,
+      executablePath: await chromium.executablePath(),
+      headless: chromium.headless,
+      ignoreHTTPSErrors: true,
+    });
 
-    browser = await puppeteer.launch(launchOptions);
     page = await browser.newPage();
-    await page.goto("https://calendly.com/johngvm20/30min", {
-      waitUntil: "networkidle2"
+    await page.goto('https://calendly.com/johngvm20/30min', {
+      waitUntil: 'networkidle2'
     });
 
     try {
-      const cookieBtn = await page.waitForSelector(".onetrust-close-btn-handler", { timeout: 5000 });
+      const cookieBtn = await page.waitForSelector('.onetrust-close-btn-handler', { timeout: 5000 });
       await cookieBtn.click();
     } catch {}
 
@@ -132,16 +116,9 @@ app.post("/api/bookCalendly", async (req, res) => {
     res.status(200).json({ message: 'Booking completed successfully!' });
 
   } catch (error) {
-    console.error(error);
     res.status(500).json({ error: error.message });
   } finally {
     if (page) await page.close();
     if (browser) await browser.close();
   }
-});
-
-app.listen(process.env.PORT || 3000, () => {
-  console.log("Server started");
-});
-
-module.exports = app;
+}
